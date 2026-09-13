@@ -1,11 +1,34 @@
-import sys, os
 import webview
 
-def resource_path(relative_path):
-    base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
-    return os.path.join(base_path, relative_path)
+COLLAPSED_SIZE = (64, 64)
+EXPANDED_SIZE = (360, 540)
+START_X, START_Y = 1500, 700   # pick a starting position on your screen
 
 class Api:
+    def __init__(self):
+        self.window = None
+        self.x = START_X
+        self.y = START_Y
+        self.size = COLLAPSED_SIZE
+
+    def set_window(self, window):
+        self.window = window
+
+    def expand_window(self):
+        self._resize_anchored(EXPANDED_SIZE)
+
+    def collapse_window(self):
+        self._resize_anchored(COLLAPSED_SIZE)
+
+    def _resize_anchored(self, new_size):
+        old_w, old_h = self.size
+        new_w, new_h = new_size
+        self.x -= (new_w - old_w)   # keep the bottom-right corner fixed
+        self.y -= (new_h - old_h)
+        self.window.move(self.x, self.y)
+        self.window.resize(new_w, new_h)
+        self.size = new_size
+
     def send_command(self, text):
         print("Command:", text)
     def start_listening(self):
@@ -18,14 +41,12 @@ class Api:
 if __name__ == '__main__':
     api = Api()
     window = webview.create_window(
-        'Iris',
-        resource_path('iris_ui.html'),
+        'Iris', 'iris_ui.html',
         js_api=api,
-        frameless=True,
-        transparent=True,
-        on_top=True,
-        width=400,
-        height=560,
+        frameless=True, transparent=True, on_top=True,
+        x=START_X, y=START_Y,
+        width=COLLAPSED_SIZE[0], height=COLLAPSED_SIZE[1],
         easy_drag=False,
     )
-    webview.start(gui='edgechromium')   # <-- this line matters on Windows
+    api.set_window(window)
+    webview.start(gui='edgechromium')

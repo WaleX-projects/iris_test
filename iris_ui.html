@@ -26,7 +26,6 @@
     color:var(--paper);
     -webkit-font-smoothing:antialiased;
     overflow:hidden;
-    background:transparent;
   }
 
   /* the whole app is one floating widget the user positions anywhere */
@@ -348,8 +347,23 @@ function hasBridge(){
   return typeof window.pywebview !== 'undefined' && window.pywebview.api;
 }
 
-function expand(){ els.pill.classList.add('expanded'); }
-function collapse(){ els.pill.classList.remove('expanded'); }
+function expand(){
+  // grow the native OS window first so the panel has room to animate
+  // into without being clipped, then trigger the CSS growth
+  if(hasBridge() && window.pywebview.api.expand_window){
+    window.pywebview.api.expand_window();
+  }
+  requestAnimationFrame(() => els.pill.classList.add('expanded'));
+}
+
+function collapse(){
+  els.pill.classList.remove('expanded');
+  // shrink the native OS window only after the CSS shrink animation
+  // finishes (0.38s, set in the .pill transition above)
+  if(hasBridge() && window.pywebview.api.collapse_window){
+    setTimeout(() => window.pywebview.api.collapse_window(), 400);
+  }
+}
 
 function setStatus(kind, label){
   els.statusText.textContent = label || kind;
