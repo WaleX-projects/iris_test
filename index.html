@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Iris</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#151517;
+    --ink-2:#1c1c1f;
+    --paper:#f3f2ef;
+    --muted:rgba(243,242,239,0.55);
+    --faint:rgba(243,242,239,0.3);
+    --accent:#6c8cff;
+    --accent-soft:rgba(108,140,255,0.32);
+    --danger:#ff6b6b;
+    --shadow: 0 18px 40px -12px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.2);
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; margin:0; background:transparent; }
+  body{
+    font-family:'Sora', sans-serif;
+    color:var(--paper);
+    -webkit-font-smoothing:antialiased;
+    overflow:hidden;
+  }
+
+  /* the whole app is one floating widget the user positions anywhere */
+  .widget{
+    position:fixed;
+    right:28px; bottom:28px;
+    display:flex;
+    flex-direction:column;
+    justify-content:flex-end;
+    align-items:flex-end;
+    z-index:100;
+  }
+
+  /* ---------- collapsed pill ---------- */
+  .pill{
+    position:relative;
+    width:56px; height:56px;
+    border-radius:50%;
+    background:var(--ink);
+    box-shadow:var(--shadow);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    transition:width 0.38s cubic-bezier(.32,.72,0,1), height 0.38s cubic-bezier(.32,.72,0,1),
+               border-radius 0.38s cubic-bezier(.32,.72,0,1), transform 0.15s ease;
+  }
+  .pill:hover{ transform:scale(1.04); }
+  .pill:active{ transform:scale(0.97); }
+
+  .pill-dot{
+    width:9px; height:9px;
+    border-radius:50%;
+    background:var(--muted);
+    transition:background 0.2s ease, box-shadow 0.2s ease;
+  }
+  .widget.busy .pill-dot{
+    background:var(--accent);
+    box-shadow:0 0 0 0 var(--accent-soft);
+    animation:breathe 1.8s ease-in-out infinite;
+  }
+  @keyframes breathe{
+    0%,100%{ box-shadow:0 0 0 0 var(--accent-soft); }
+    50%{ box-shadow:0 0 0 9px rgba(108,140,255,0); }
+  }
+
+  /* small badge that fades in on hover — quick voice shortcut,
+     the way a story ring gets a small camera badge on hover */
+  .mic-badge{
+    position:absolute;
+    right:-2px; bottom:-2px;
+    width:22px; height:22px;
+    border-radius:50%;
+    background:var(--accent);
+    border:2px solid var(--ink);
+    color:var(--ink);
+    display:flex; align-items:center; justify-content:center;
+    opacity:0; transform:scale(0.7);
+    transition:opacity 0.15s ease, transform 0.15s ease;
+    cursor:pointer;
+  }
+  .pill:hover .mic-badge, .mic-badge.listening{ opacity:1; transform:none; }
+  .mic-badge svg{ width:10px; height:10px; }
+  .mic-badge.listening{
+    background:var(--accent);
+    animation:badge-pulse 1.3s ease-in-out infinite;
+  }
+  @keyframes badge-pulse{
+    0%,100%{ box-shadow:0 0 0 0 var(--accent-soft); }
+    50%{ box-shadow:0 0 0 7px rgba(108,140,255,0); }
+  }
+
+  .caption{
+    position:absolute;
+    right:64px; bottom:16px;
+    max-width:200px;
+    padding:9px 13px;
+    border-radius:14px 14px 4px 14px;
+    background:var(--ink);
+    box-shadow:var(--shadow);
+    font-size:13px;
+    line-height:1.4;
+    opacity:0; transform:translateY(4px);
+    pointer-events:none;
+    transition:opacity 0.18s ease, transform 0.18s ease;
+    white-space:nowrap;
+  }
+  .caption.show{ opacity:1; transform:none; }
+
+  /* ---------- expanded panel (the pill grows into this) ---------- */
+  .pill.expanded{
+    width:340px; height:min(500px, 78vh);
+    border-radius:24px;
+    cursor:default;
+    align-items:stretch;
+    justify-content:flex-start;
+  }
+  .pill.expanded .pill-dot,
+  .pill.expanded .mic-badge{ display:none; }
+
+  .panel{
+    display:none;
+    flex-direction:column;
+    width:100%; height:100%;
+    min-height:0;
+    opacity:0;
+    transition:opacity 0.2s ease 0.08s;
+  }
+  .pill.expanded .panel{ display:flex; opacity:1; }
+
+  .panel-header{
+    display:flex; align-items:center; gap:10px;
+    padding:16px 16px 12px;
+    flex:none;
+  }
+  .panel-header .name{ font-size:15px; font-weight:600; }
+  .panel-header .status{ font-size:12px; color:var(--muted); margin-top:1px; }
+  .panel-header .collapse-btn{
+    margin-left:auto;
+    width:26px; height:26px; border-radius:50%;
+    background:transparent; border:none; color:var(--muted);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    transition:background 0.15s ease, color 0.15s ease;
+  }
+  .panel-header .collapse-btn:hover{ background:var(--ink-2); color:var(--paper); }
+  .panel-header .collapse-btn svg{ width:12px; height:12px; }
+
+  .panel-body{
+    flex:1; min-height:0;
+    overflow-y:auto;
+    padding:0 16px;
+    display:flex; flex-direction:column; gap:14px;
+  }
+
+  .live-view{
+    flex:none;
+    aspect-ratio:16/10;
+    border-radius:16px;
+    background:var(--ink-2);
+    overflow:hidden;
+    position:relative;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .live-view img{ width:100%; height:100%; object-fit:cover; display:none; }
+  .live-view.has-frame img{ display:block; }
+  .live-view.has-frame .empty{ display:none; }
+  .live-view .empty{ color:var(--faint); font-size:12.5px; text-align:center; padding:0 24px; }
+
+  .section-label{ font-size:12px; color:var(--muted); margin:0 0 6px; }
+
+  .steps{ display:flex; flex-direction:column; }
+  .step{
+    display:flex; gap:10px; align-items:flex-start;
+    padding:7px 0;
+    border-top:1px solid var(--ink-2);
+  }
+  .step:first-child{ border-top:none; }
+  .step .check{
+    flex:none; width:15px; height:15px; margin-top:2px;
+    border-radius:50%; background:var(--ink-2);
+    display:flex; align-items:center; justify-content:center;
+    color:var(--accent);
+  }
+  .step .check svg{ width:8px; height:8px; }
+  .step .txt{ font-size:13px; line-height:1.45; }
+  .step .time{ font-size:11px; color:var(--faint); margin-top:1px; }
+
+  .panel-footer{
+    flex:none;
+    padding:12px 16px 16px;
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .composer{
+    display:flex; align-items:center; gap:6px;
+    background:var(--ink-2);
+    border-radius:14px;
+    padding:5px 6px 5px 14px;
+  }
+  .composer input{
+    flex:1; background:none; border:none; outline:none;
+    color:var(--paper); font-family:'Sora', sans-serif; font-size:13.5px;
+    padding:8px 0;
+  }
+  .composer input::placeholder{ color:var(--faint); }
+  .composer .icon-btn{
+    flex:none; width:32px; height:32px; border-radius:10px;
+    border:none; background:transparent; color:var(--muted);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    transition:background 0.15s ease, color 0.15s ease;
+  }
+  .composer .icon-btn:hover{ background:rgba(255,255,255,0.06); color:var(--paper); }
+  .composer .icon-btn.send{ background:var(--accent); color:var(--ink); }
+  .composer .icon-btn.send:hover{ background:var(--accent); filter:brightness(1.08); }
+  .composer .icon-btn.mic.listening{ color:var(--accent); }
+  .composer .icon-btn svg{ width:14px; height:14px; }
+
+  .quick-links{ display:flex; gap:14px; }
+  .text-link{
+    font-family:'Sora', sans-serif; font-size:12px; color:var(--faint);
+    background:none; border:none; cursor:pointer; padding:0;
+    transition:color 0.15s ease;
+  }
+  .text-link:hover{ color:var(--muted); }
+  .text-link.danger:hover{ color:var(--danger); }
+
+  ::-webkit-scrollbar{ width:6px; }
+  ::-webkit-scrollbar-thumb{ background:rgba(255,255,255,0.12); border-radius:8px; }
+  ::-webkit-scrollbar-track{ background:transparent; }
+
+  @media (prefers-reduced-motion: reduce){
+    .pill-dot, .mic-badge.listening{ animation:none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="widget" id="widget">
+  <div class="caption" id="caption"></div>
+
+  <div class="pill" id="pill">
+    <div class="pill-dot" id="pillDot"></div>
+    <div class="mic-badge" id="micBadge" title="Talk to Iris">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z" stroke="currentColor" stroke-width="2"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="name">Iris</div>
+          <div class="status" id="statusText">Idle</div>
+        </div>
+        <button class="collapse-btn" id="collapseBtn" title="Close">
+          <svg viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+
+      <div class="panel-body">
+        <div class="live-view" id="liveView">
+          <img id="frame" alt="Current screen" />
+          <div class="empty">Iris will show what it sees here once a task starts.</div>
+        </div>
+
+        <div>
+          <p class="section-label">Activity</p>
+          <div class="steps" id="steps"></div>
+        </div>
+      </div>
+
+      <div class="panel-footer">
+        <div class="composer">
+          <input id="commandInput" type="text" placeholder="Ask Iris to do something…" />
+          <button class="icon-btn mic" id="micBtn" title="Talk">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z" stroke="currentColor" stroke-width="1.8"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
+          <button class="icon-btn send" id="sendBtn" title="Send">
+            <svg viewBox="0 0 16 16" fill="none"><path d="M2 8h11M8 3l5 5-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+        <div class="quick-links">
+          <button class="text-link" id="pauseBtn">Pause</button>
+          <button class="text-link danger" id="stopBtn">Stop</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+   IRIS UI — a single floating widget with two states
+   -------------------------------------------------------------------------
+   Plain HTML/CSS/JS, no build step — point pywebview at this file:
+
+     webview.create_window('Iris', 'iris_ui.html', frameless=True,
+                            transparent=True, on_top=True,
+                            width=400, height=560)
+
+   Collapsed: a small dot the user can otherwise ignore.
+   Expanded:  the same element grows into the dashboard (status, live
+              view, step log, composer). Click the pill, or hold the
+              mic badge that fades in on hover, to interact.
+
+   Python -> JS (call with window.evaluate_js):
+     Iris.setStatus("watching", "Reading your inbox")
+     Iris.setStatus("acting", "Clicking Submit")
+     Iris.setStatus("idle", "Idle")
+     Iris.addStep("Opened Chrome")
+     Iris.setFrame("data:image/png;base64,....")
+     Iris.clearFrame()
+     Iris.hearTranscript("open my email")   // after your STT resolves
+     Iris.acknowledge("Okay — on it.")      // shows the caption bubble
+
+   JS -> Python: expose an api class in pywebview; this file calls
+   window.pywebview.api.send_command(text) / pause() / stop() /
+   start_listening() automatically when present. Without a bridge
+   (e.g. opening this file directly in a browser) everything falls
+   back to a local mock so it's demoable on its own.
+   ========================================================================= */
+
+const els = {
+  widget: document.getElementById('widget'),
+  pill: document.getElementById('pill'),
+  pillDot: document.getElementById('pillDot'),
+  micBadge: document.getElementById('micBadge'),
+  caption: document.getElementById('caption'),
+  collapseBtn: document.getElementById('collapseBtn'),
+  statusText: document.getElementById('statusText'),
+  liveView: document.getElementById('liveView'),
+  frame: document.getElementById('frame'),
+  steps: document.getElementById('steps'),
+  input: document.getElementById('commandInput'),
+  micBtn: document.getElementById('micBtn'),
+  sendBtn: document.getElementById('sendBtn'),
+  pauseBtn: document.getElementById('pauseBtn'),
+  stopBtn: document.getElementById('stopBtn'),
+};
+
+function hasBridge(){
+  return typeof window.pywebview !== 'undefined' && window.pywebview.api;
+}
+
+function expand(){ els.pill.classList.add('expanded'); }
+function collapse(){ els.pill.classList.remove('expanded'); }
+
+function setStatus(kind, label){
+  els.statusText.textContent = label || kind;
+  els.widget.classList.toggle('busy', kind === 'watching' || kind === 'acting');
+}
+
+function addStep(text){
+  const time = new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+  const row = document.createElement('div');
+  row.className = 'step';
+  row.innerHTML = `
+    <div class="check"><svg viewBox="0 0 12 12" fill="none"><path d="M2 6l2.5 2.5L10 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div><div class="txt"></div><div class="time">${time}</div></div>`;
+  row.querySelector('.txt').textContent = text;
+  els.steps.appendChild(row);
+  els.steps.parentElement.scrollTop = els.steps.parentElement.scrollHeight;
+  els.liveView.parentElement.scrollTop = els.liveView.parentElement.scrollHeight;
+}
+
+function setFrame(dataUrl){ els.frame.src = dataUrl; els.liveView.classList.add('has-frame'); }
+function clearFrame(){ els.frame.src = ''; els.liveView.classList.remove('has-frame'); }
+
+function showCaption(text){
+  els.caption.textContent = text;
+  els.caption.classList.add('show');
+  clearTimeout(showCaption._t);
+  showCaption._t = setTimeout(() => els.caption.classList.remove('show'), 3000);
+}
+
+function startListening(fromBadge){
+  const target = fromBadge ? els.micBadge : els.micBtn;
+  target.classList.add('listening');
+  if(hasBridge() && window.pywebview.api.start_listening){
+    window.pywebview.api.start_listening();
+  } else {
+    setTimeout(() => { target.classList.remove('listening'); hearTranscript('open my email and check the inbox'); }, 1400);
+  }
+}
+
+function hearTranscript(text){
+  showCaption(`Heard: “${text}”`);
+  addStep(`Heard: “${text}”`);
+  expand();
+  acknowledge('Okay — on it.');
+  setStatus('watching', 'Reading the screen…');
+  setTimeout(() => {
+    setStatus('acting', `Working on: ${text}`);
+    addStep(`Started: ${text}`);
+  }, 500);
+}
+
+function acknowledge(text){
+  showCaption(text);
+  addStep(text);
+}
+
+function sendCommand(){
+  const text = els.input.value.trim();
+  if(!text) return;
+  addStep(`You: ${text}`);
+  els.input.value = '';
+  if(hasBridge()){
+    window.pywebview.api.send_command(text);
+  } else {
+    setStatus('watching', 'Reading the screen…');
+    setTimeout(() => {
+      setStatus('acting', `Working on: ${text}`);
+      addStep(`Started: ${text}`);
+    }, 500);
+  }
+}
+
+// pill: click toggles expand, except when the click landed on the
+// mic badge or (while expanded) on interactive controls inside the panel
+els.pill.addEventListener('click', (e) => {
+  if(e.target.closest('.mic-badge')) return;
+  if(els.pill.classList.contains('expanded')) return; // panel handles its own clicks
+  expand();
+});
+els.micBadge.addEventListener('click', (e) => { e.stopPropagation(); startListening(true); });
+els.collapseBtn.addEventListener('click', (e) => { e.stopPropagation(); collapse(); });
+
+// click outside the widget collapses it
+document.addEventListener('click', (e) => {
+  if(!els.widget.contains(e.target)) collapse();
+});
+
+els.sendBtn.addEventListener('click', sendCommand);
+els.input.addEventListener('keydown', (e) => { if(e.key === 'Enter') sendCommand(); });
+els.micBtn.addEventListener('click', () => startListening(false));
+
+els.pauseBtn.addEventListener('click', () => {
+  if(hasBridge()) window.pywebview.api.pause();
+  else setStatus('idle', 'Paused');
+});
+els.stopBtn.addEventListener('click', () => {
+  if(hasBridge()) window.pywebview.api.stop();
+  else { setStatus('idle', 'Idle'); clearFrame(); }
+});
+
+// simple drag-to-reposition while collapsed (a real floating button
+// should be movable, not stuck in one corner)
+(function enableDrag(){
+  let dragging = false, moved = false, offX = 0, offY = 0;
+  els.pill.addEventListener('pointerdown', (e) => {
+    if(els.pill.classList.contains('expanded')) return;
+    dragging = true; moved = false;
+    const r = els.widget.getBoundingClientRect();
+    offX = e.clientX - r.left; offY = e.clientY - r.top;
+    els.pill.setPointerCapture(e.pointerId);
+  });
+  els.pill.addEventListener('pointermove', (e) => {
+    if(!dragging) return;
+    moved = true;
+    els.widget.style.left = (e.clientX - offX) + 'px';
+    els.widget.style.top = (e.clientY - offY) + 'px';
+    els.widget.style.right = 'auto';
+    els.widget.style.bottom = 'auto';
+  });
+  els.pill.addEventListener('pointerup', (e) => {
+    dragging = false;
+    if(moved) e.stopPropagation(); // dragging shouldn't also trigger expand
+  });
+})();
+
+window.Iris = { setStatus, addStep, setFrame, clearFrame, hearTranscript, acknowledge };
+
+addStep('Iris is ready.');
+</script>
+
+</body>
+</html>
